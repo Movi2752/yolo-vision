@@ -12,12 +12,13 @@ import time
 import cv2
 from ultralytics import YOLO
 import numpy as np
+import torch
 
 # --- настройки (крути под себя) ---
-MODEL = "yolo26n.pt"   # nano — самый лёгкий вариант; скачается сам при первом запуске
-CAM_INDEX = 0          # 0 — первая/встроенная камера; поставь 1, 2... если камер несколько
-CONF = 0.5             # порог уверенности (0..1): ниже — больше детекций, но больше мусора
-DEVICE = 0             # 0 — твоя NVIDIA GPU; "cpu" — принудительно на процессоре
+MODEL = "yolo26s.engine"
+CAM_INDEX = 0
+CONF = 0.35            # 0.5 жестковат — режет валидные объекты; мусор почти не вырастет
+DEVICE = 0
 
 def letterbox_to_window(img, win_name):
     _, _, w, h = cv2.getWindowImageRect(win_name)
@@ -33,6 +34,8 @@ def letterbox_to_window(img, win_name):
     return canvas
 
 def main() -> None:
+    print(
+        f"🚀 GPU Active: {torch.cuda.is_available()} - {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
     model = YOLO(MODEL)
 
     # CAP_DSHOW заметно быстрее открывает камеру на Windows
