@@ -13,12 +13,36 @@ import cv2
 from ultralytics import YOLO
 import numpy as np
 import torch
+import threading
 
 # --- настройки (крути под себя) ---
-MODEL = "yolo26s.engine"
+MODEL = "yolo26m.engine"
 CAM_INDEX = 0
 CONF = 0.35            # 0.5 жестковат — режет валидные объекты; мусор почти не вырастет
 DEVICE = 0
+
+class CamReader:
+    def __init__(self, cap):
+        self.cap, self.frame, self.ok = cap, None, True
+        self.lock = threading.Lock()
+        threading.Thread(target=self._loop, daemon=True).start()
+        # ждём первый кадр, чтобы main не стартовал с пустотой
+        t0 = time.time()
+        while self.frame is None and self.ok and time.time() - t0 < 5:
+            time.sleep(0.01)
+
+    def _loop(self):
+        while self.ok:
+            ok, f = self.cap.read()
+            if not ok:
+                self.ok = False
+                break
+            with self.lock:
+                self.frame = f
+
+    def read(self):
+        with self.lock:
+            return (self.frame is not None), (self.frame.copy() if self.frame is not None else None)
 
 def letterbox_to_window(img, win_name):
     _, _, w, h = cv2.getWindowImageRect(win_name)
@@ -42,13 +66,16 @@ def main() -> None:
     cap = cv2.VideoCapture(CAM_INDEX, cv2.CAP_DSHOW)
     if not cap.isOpened():
         raise RuntimeError(f"Не удалось открыть камеру #{CAM_INDEX}")
+    reader = CamReader(cap)
 
     prev = time.time()
     while True:
-        ok, frame = cap.read()
+        ok, frame = reader.read()
+        if not reader.ok:
+            break  # камера реально умерла
         if not ok:
-            break
-        frame = cv2.flip(frame, 1)  # зеркало по горизонтали
+            continue  # кадра пока нет — пропускаем итерацию
+        frame = cv2.flip(frame, 1)  # зеркало по горизонталиq
 
         # инференс по одному кадру
         results = model.predict(frame, conf=CONF, device=DEVICE, verbose=False)
